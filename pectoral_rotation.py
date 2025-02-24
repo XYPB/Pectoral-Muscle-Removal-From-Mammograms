@@ -98,7 +98,7 @@ def enhance_contrast(image):
         image = np.array(image)
     if image.max() <= 1:
         image = (image * 255).astype(np.uint8) # Convert to 8-bit if not already
-
+    
     # Apply histogram equalization
     enhanced_image = cv2.equalizeHist(image)
     
@@ -192,6 +192,7 @@ def pick_line(image, shortlist_lines):
         rr = np.clip(rr, 0, image.shape[0]-1)
         cc = np.clip(cc, 0, image.shape[1]-1)
         # ignore background regions
+        segmented_roi = image[rr, cc]
         segmented_roi = segmented_roi.flatten()[segmented_roi > 0]
         target_std = np.std(segmented_roi)
         if target_std < min_std:
@@ -240,6 +241,7 @@ def rot_pectoral_image(filename, verbose=False, dest=None, show_img=False, plot_
         for line in shortlisted_lines:
             axes[2].plot((line['point1'][0],line['point2'][0]), (line['point1'][1],line['point2'][1]), '-r')
     
+    rot_mat = None
     if shortlisted_lines:
         first_line = shortlisted_lines[0]
         angle = first_line['angle']
@@ -254,7 +256,7 @@ def rot_pectoral_image(filename, verbose=False, dest=None, show_img=False, plot_
         elif y2 == 0:
             center = (x2, y2)
         else:
-            center = (image.shape[1] // 2, image.shape[0] // 2)
+            center = (0, image.shape[0] // 2)
         # double the image width to prevent cropping during rotation
         new_width = 2 * image.shape[1]
         # Expand the image with 0s according to the new width
@@ -275,9 +277,21 @@ def rot_pectoral_image(filename, verbose=False, dest=None, show_img=False, plot_
                 filename = filename.split('/')[-1]
                 dest = os.path.join(dest, filename)
                 plt.savefig(dest, bbox_inches='tight')
+        rot_mat = M
     else:
         # if no line is detected, return the original image
-        rotate_image = otsu_cut(image)
+        # return center rotated mean angle image
+        angle = 18
+        center = (0, image.shape[0] // 2)
+        # double the image width to prevent cropping during rotation
+        new_width = 2 * image.shape[1]
+        # Expand the image with 0s according to the new width
+        expanded_image = np.zeros((image.shape[0], new_width))
+        expanded_image[:, :image.shape[1]] = image
+        M = cv2.getRotationMatrix2D(center, angle, 1.0)
+        rotate_image = cv2.warpAffine(expanded_image, M, (expanded_image.shape[1], expanded_image.shape[0]))
+        rotate_image = otsu_cut(rotate_image)
+        
         if plot_img:
             axes[3].axis('off')
             axes[4].axis('off')
@@ -285,34 +299,58 @@ def rot_pectoral_image(filename, verbose=False, dest=None, show_img=False, plot_
                 filename = filename.split('/')[-1]
                 dest = os.path.join(dest, filename)
                 plt.savefig(dest, bbox_inches='tight')
+        rot_mat = M
     
     # flip back the image if it was flipped
+    if isinstance(rotate_image, Image.Image):
+        rotate_image = np.array(rotate_image)
+    if rotate_image.max() <= 1:
+        rotate_image = (rotate_image * 255).astype(np.uint8) # Convert to 8-bit if not already
     if is_flipped:
         rotate_image = cv2.flip(rotate_image, 1)
-    save_name = filename.replace('.jpg', '_align_cc.jpg')
-    rotate_image = Image.fromarray((rotate_image * 255).astype(np.uint8)).convert('L')
-    rotate_image.save(save_name)
+    # save_name = filename.replace('.jpg', '_align_cc.jpg')
+    # rotate_image = Image.fromarray((rotate_image * 255).astype(np.uint8)).convert('L')
+    # rotate_image.save(save_name)
+    
     
     if show_img:
         plt.show()
         plt.close()
         plt.cla()
+    return rot_mat
 
 if __name__ == '__main__':
-    image_list = glob(IMAGE_PATH)
-    print(len(image_list))
+    # image_list = glob(IMAGE_PATH)
+    # print(len(image_list))
     
+    # df = pd.read_csv("data/tables/EMBED_OpenData_metadata_reduced.csv")
+    # # only consider 2D mammo
+    # df = df[df['FinalImageType'] == '2D']
+    # # only consider screening mammo
+    # screen_idx = df['StudyDescription'].apply(lambda x: x.lower().find('screen') > 0)
+    # df = df[screen_idx]
+    # df['new_path'] = df['anon_dicom_path'].apply(get_orig_path)
+    # path_to_description = dict(zip(df['new_path'], df['SeriesDescription']))
+
+    # mlo_images = [path for path in image_list if 'MLO' in path_to_description.get(path, '')]
+    # print(len(mlo_images))
+    
+    image_list = glob("/mnt/f/EMBED_1080_ROI_JPG/EMBED_1080_ROI_JPG/images/*/*/*/*/*.jpg")
+    print(len(image_list))
+    get_orig_path = lambda x: x.replace("/mnt/NAS2/mammo/anon_dicom", '/mnt/f/EMBED_1080_ROI_JPG/EMBED_1080_ROI_JPG/images').replace('.dcm', '_resized.jpg')
     df = pd.read_csv("data/tables/EMBED_OpenData_metadata_reduced.csv")
-    # only consider 2D mammo
     df = df[df['FinalImageType'] == '2D']
-    # only consider screening mammo
     screen_idx = df['StudyDescription'].apply(lambda x: x.lower().find('screen') > 0)
     df = df[screen_idx]
     df['new_path'] = df['anon_dicom_path'].apply(get_orig_path)
     path_to_description = dict(zip(df['new_path'], df['SeriesDescription']))
-
     mlo_images = [path for path in image_list if 'MLO' in path_to_description.get(path, '')]
     print(len(mlo_images))
     
-    for i in tqdm(range(0, 100)):
-        rot_pectoral_image(mlo_images[i], verbose=False, dest=None, show_img=False)
+    path2rot = {}
+    for i in tqdm(range(len(mlo_images))):
+        rot_mat = rot_pectoral_image(mlo_images[i], verbose=False, dest=None, show_img=False, plot_img=False)
+        path2rot[mlo_images[i]] = rot_mat
+    print(len(path2rot))
+    import pickle
+    pickle.dump(path2rot, open('data/path2rot.pkl', 'wb'))
