@@ -10,7 +10,7 @@ from skimage.filters import sobel
 from scipy.ndimage import gaussian_filter1d
 from skimage.draw import polygon
 from skimage.transform import hough_line, hough_line_peaks
-from preprocess import read_image, otsu_cut, right_orient_mammogram, enhance_contrast, gaussian_blur, remove_text_label
+from preprocess import read_image, otsu_cut, right_orient_mammogram, enhance_contrast, gaussian_blur, remove_text_label, threshold_background
 
 def mask_bottom_fn(image):
     # mask out the bottom 10% of the image
@@ -356,12 +356,16 @@ def pick_line_conf(image, shortlist_lines):
 import os
 std_list = []
 angle_list = []
-def display_image(filename_pair, verbose=False, dest=None, show_img=True, filled_align=False):
+def display_image(filename_pair, verbose=False, dest=None, show_img=True, filled_align=False, background_threshold=0):
     global std_list, angle_list
     filename = filename_pair[0]
     image = read_image(filename)
+    if background_threshold > 0:
+        image = threshold_background(image, threshold=background_threshold)
     cc_path = filename_pair[1]
     cc_image = read_image(cc_path)
+    if background_threshold > 0:
+        cc_image = threshold_background(cc_image, threshold=background_threshold)
     cc_image, _ = right_orient_mammogram(cc_image)
     cc_image = remove_text_label(cc_image)
     cc_image = otsu_cut(cc_image)

@@ -23,6 +23,10 @@ def enhance_contrast(image):
 
 
 def right_orient_mammogram(image):
+    if isinstance(image, Image.Image):
+        image = np.array(image)
+    if image.max() <= 1:
+        image = (image * 255).astype(np.uint8) # Convert to 8-bit if not already
     left_nonzero = cv2.countNonZero(image[:, 0:int(image.shape[1]/2)])
     right_nonzero = cv2.countNonZero(image[:, int(image.shape[1]/2):])
     
@@ -69,7 +73,25 @@ def otsu_cut(x):
     img = Image.fromarray(x)
     return img
 
-def remove_text_label(image):
+def threshold_background(image, threshold=0):
+    # Convert the image to a NumPy array if it's a PIL image
+    if isinstance(image, Image.Image):
+        image = np.array(image)
+    if image.max() <= 1:
+        image = (image * 255).astype(np.uint8) # Convert to 8-bit if not already
+
+    # Create a mask where pixel values are above the threshold
+    mask = image > threshold
+    
+    # Create an output image initialized to black
+    output_image = np.zeros_like(image)
+    
+    # Copy pixels from the original image where the mask is True
+    output_image[mask] = image[mask]
+    
+    return Image.fromarray(output_image)
+
+def remove_text_label(image, background_threshold=0):
     # Convert the image to a NumPy array if it's a PIL image
     if isinstance(image, Image.Image):
         image = np.array(image)
@@ -81,12 +103,12 @@ def remove_text_label(image):
         image = (image * 255).astype(np.uint8) # Convert to 8-bit if not already
 
     # Binarize the image using a naive non-zero thresholding
-    binary_image = (image > 0).astype(np.uint8) * 255
+    binary_image = (image > background_threshold).astype(np.uint8) * 255
     
     # Apply Gaussian blur to the binarized image
     blurred_image = cv2.GaussianBlur(binary_image, (5, 5), 2.0)
     # Binarize the blurred image again
-    binary_image = (blurred_image > 0).astype(np.uint8) * 255
+    binary_image = (blurred_image > background_threshold).astype(np.uint8) * 255
     # Find connected components
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary_image, connectivity=8)
     
