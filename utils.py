@@ -6,8 +6,8 @@ from scipy.stats import wasserstein_distance
 import matplotlib.pyplot as plt
 
 def emd_from_samples(x, y):
-    normalized_x = x / np.max(x) if np.max(x) > 0 else x
-    normalized_y = y / np.max(y) if np.max(y) > 0 else y
+    normalized_x = x / np.sum(x)
+    normalized_y = y / np.sum(y)
     return wasserstein_distance(normalized_x, normalized_y)
 
 def overlap_ratio(x, y):
@@ -144,10 +144,10 @@ def display_distribution_res(mlo_image, cc_image, smooth_sigma=10, save_path=Non
         plt.axis('off')
         
         plt.subplot(1, 3, 3)
-        plt.plot(mlo_ap_dist / np.max(mlo_ap_dist), label='MLO', color='tab:blue')
-        plt.fill_between(range(len(mlo_ap_dist)), mlo_ap_dist / np.max(mlo_ap_dist), alpha=0.3, color='tab:blue')
-        plt.plot(cc_ap_dist / np.max(cc_ap_dist), label='CC', color='tab:red')
-        plt.fill_between(range(len(cc_ap_dist)), cc_ap_dist / np.max(cc_ap_dist), alpha=0.3, color='tab:red')
+        plt.plot(mlo_ap_dist / np.sum(mlo_ap_dist), label='MLO', color='tab:blue')
+        plt.fill_between(range(len(mlo_ap_dist)), mlo_ap_dist / np.sum(mlo_ap_dist), alpha=0.3, color='tab:blue')
+        plt.plot(cc_ap_dist / np.sum(cc_ap_dist), label='CC', color='tab:red')
+        plt.fill_between(range(len(cc_ap_dist)), cc_ap_dist / np.sum(cc_ap_dist), alpha=0.3, color='tab:red')
         plt.xlim(0, max(len(mlo_ap_dist), len(cc_ap_dist)))
         plt.xlabel("AP axis")
         plt.ylabel("Pixel count")
