@@ -11,7 +11,6 @@ from scipy.ndimage import gaussian_filter1d
 from skimage.draw import polygon
 from skimage.transform import hough_line, hough_line_peaks
 from preprocess import read_image, otsu_cut, right_orient_mammogram, enhance_contrast, gaussian_blur, remove_text_label, threshold_background
-from .utils import display_distribution_res
 
 def mask_bottom_fn(image):
     # mask out the bottom 10% of the image
@@ -555,60 +554,3 @@ def display_image(filename_pair, verbose=False, dest=None, show_img=True, filled
         plt.close()
     return aligned_image_pair
 
-
-def rot_shift_crop_align(mlo_image, cc_image):
-    mlo_image = mlo_image.copy().resize((512, 512))
-    cc_image = cc_image.copy().resize((512, 512))
-    min_emd = np.inf
-    min_jsd = np.inf
-    best_crop = None
-    best_rot = None
-    optimal_cc_image = None
-    optimal_mlo_image = None
-    emd_list = []
-    kld_list = []
-    crop_list = list(range(0, 128, 8))
-    rot_list = list(range(-6, 7, 2))
-    for crop in crop_list:
-        for rot in rot_list:
-            # mlo_image_cropped = Image.fromarray(np.array(mlo_image)[:, crop:]).resize((512, 512))
-            # res = display_distribution_res(mlo_image_cropped, cc_image, smooth_sigma=5, show_img=False)
-            # rotate mlo image by rot degrees
-            # mlo_image_rotated = mlo_image.rotate(rot, resample=Image.BILINEAR, expand=False)
-            if rot > 0:
-                # rotate anticlockwise, choose left bottom corner as anchor
-                # use cv2 to rotate around anchor
-                M = cv2.getRotationMatrix2D((0, mlo_image.size[1]), rot, 1.0)
-                expanded_image = np.zeros((mlo_image.size[1] * 2, mlo_image.size[0] * 2))
-                # place the original image at the bottom left corner
-                expanded_image[mlo_image.size[1]:, :mlo_image.size[0]] = np.array(mlo_image)
-                mlo_image_rotated = Image.fromarray(cv2.warpAffine(np.array(mlo_image), M, (expanded_image.shape[1], expanded_image.shape[0])))
-            else:
-                # rotate anticlockwise, choose top left corner as anchor
-                M = cv2.getRotationMatrix2D((0, 0), rot, 1.0)
-                expanded_image = np.zeros((mlo_image.size[1] * 2, mlo_image.size[0] * 2))
-                # place the original image at the top left corner
-                expanded_image[:mlo_image.size[1], :mlo_image.size[0]] = np.array(mlo_image)
-                mlo_image_rotated = Image.fromarray(cv2.warpAffine(np.array(mlo_image), M, (expanded_image.shape[1], expanded_image.shape[0])))
-            
-            # crop cc image by crop pixels from left
-            cc_image_cropped = Image.fromarray(np.array(cc_image)[:, crop:]).resize((512, 512))
-            # post process both images with adaptive cut top and right black areas
-            
-            mlo_image_rotated = adaptive_cut_right_fn(adaptive_cut_bottom_fn(adaptive_cut_top_fn(np.array(mlo_image_rotated))[0])[0])[0]
-            mlo_image_rotated = Image.fromarray(mlo_image_rotated).resize((512, 512))
-            cc_image_cropped = adaptive_cut_right_fn(adaptive_cut_top_fn(np.array(cc_image_cropped))[0])[0]
-            cc_image_cropped = Image.fromarray(cc_image_cropped).resize((512, 512))
-            
-            res = display_distribution_res(mlo_image_rotated, cc_image_cropped, smooth_sigma=5, show_img=False)
-            emd_list.append(res['emd'])
-            kld_list.append(res['kld'])
-            # if res['emd'] < min_emd:
-                # min_emd = res['emd']
-            if res['kld'] < min_jsd:
-                min_jsd = res['kld']
-                best_crop = crop
-                best_rot = rot
-                optimal_mlo_image = mlo_image_rotated.copy()
-                optimal_cc_image = cc_image_cropped.copy()
-    return optimal_mlo_image, optimal_cc_image
